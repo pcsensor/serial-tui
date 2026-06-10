@@ -16,6 +16,12 @@ pub enum FocusArea {
     QuickSend,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickSendMode {
+    Normal,
+    Adding,
+}
+
 #[derive(Debug, Clone)]
 pub struct TerminalLine {
     pub timestamp: String,
@@ -35,9 +41,24 @@ pub struct App {
     pub send_input: String,
     pub command_list: CommandList,
     pub quick_send_selected: usize,
+    pub quick_send_mode: QuickSendMode,
     pub available_ports: Vec<String>,
     pub port_selected: usize,
     pub baud_rate_selected: usize,
+    /// 设置栏子项索引：0=端口,1=波特率,2=数据位,3=校验位,4=停止位,5=流控
+    pub settings_sub_index: usize,
+    /// 数据位选项
+    pub data_bits_options: Vec<u8>,
+    pub data_bits_selected: usize,
+    /// 校验位选项
+    pub parity_options: Vec<&'static str>,
+    pub parity_selected: usize,
+    /// 停止位选项
+    pub stop_bits_options: Vec<u8>,
+    pub stop_bits_selected: usize,
+    /// 流控选项
+    pub flow_control_options: Vec<&'static str>,
+    pub flow_control_selected: usize,
     pub parser_registry: ParserRegistry,
     pub running: bool,
     pub config: AppConfig,
@@ -65,9 +86,19 @@ impl App {
             send_input: String::new(),
             command_list,
             quick_send_selected: 0,
+            quick_send_mode: QuickSendMode::Normal,
             available_ports: SerialManager::list_ports(),
             port_selected: 0,
             baud_rate_selected: 6,
+            settings_sub_index: 0,
+            data_bits_options: vec![5, 6, 7, 8],
+            data_bits_selected: 3, // 默认 8
+            parity_options: vec!["none", "odd", "even"],
+            parity_selected: 0, // 默认 none
+            stop_bits_options: vec![1, 2],
+            stop_bits_selected: 0, // 默认 1
+            flow_control_options: vec!["none", "hardware", "software"],
+            flow_control_selected: 0, // 默认 none
             parser_registry: ParserRegistry::default_parsers(),
             running: true,
             config,
@@ -257,37 +288,124 @@ impl App {
     }
 
     fn handle_settings_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up => {
-                if self.port_selected > 0 {
-                    self.port_selected -= 1;
+        // Tab 切换设置栏子项
+        if key.code == KeyCode::Tab {
+            self.settings_sub_index = (self.settings_sub_index + 1) % 6;
+            return;
+        }
+
+        match self.settings_sub_index {
+            // 端口选择
+            0 => match key.code {
+                KeyCode::Up => {
+                    if self.port_selected > 0 {
+                        self.port_selected -= 1;
+                    }
                 }
-            }
-            KeyCode::Down => {
-                if !self.available_ports.is_empty()
-                    && self.port_selected < self.available_ports.len() - 1
-                {
-                    self.port_selected += 1;
+                KeyCode::Down => {
+                    if !self.available_ports.is_empty()
+                        && self.port_selected < self.available_ports.len() - 1
+                    {
+                        self.port_selected += 1;
+                    }
                 }
-            }
-            KeyCode::Left => {
-                if self.baud_rate_selected > 0 {
-                    self.baud_rate_selected -= 1;
+                _ => {}
+            },
+            // 波特率
+            1 => match key.code {
+                KeyCode::Left | KeyCode::Down => {
+                    if self.baud_rate_selected > 0 {
+                        self.baud_rate_selected -= 1;
+                    }
                 }
-            }
-            KeyCode::Right => {
-                if self.baud_rate_selected < self.baud_rates.len() - 1 {
-                    self.baud_rate_selected += 1;
+                KeyCode::Right | KeyCode::Up => {
+                    if self.baud_rate_selected < self.baud_rates.len() - 1 {
+                        self.baud_rate_selected += 1;
+                    }
                 }
-            }
-            KeyCode::Char('c')
-                if key.modifiers == KeyModifiers::CONTROL
-                    || key.modifiers == KeyModifiers::NONE =>
-            {
-                self.toggle_connection();
-            }
+                _ => {}
+            },
+            // 数据位
+            2 => match key.code {
+                KeyCode::Left | KeyCode::Down => {
+                    if self.data_bits_selected > 0 {
+                        self.data_bits_selected -= 1;
+                    }
+                }
+                KeyCode::Right | KeyCode::Up => {
+                    if self.data_bits_selected < self.data_bits_options.len() - 1 {
+                        self.data_bits_selected += 1;
+                    }
+                }
+                _ => {}
+            },
+            // 校验位
+            3 => match key.code {
+                KeyCode::Left | KeyCode::Down => {
+                    if self.parity_selected > 0 {
+                        self.parity_selected -= 1;
+                    }
+                }
+                KeyCode::Right | KeyCode::Up => {
+                    if self.parity_selected < self.parity_options.len() - 1 {
+                        self.parity_selected += 1;
+                    }
+                }
+                _ => {}
+            },
+            // 停止位
+            4 => match key.code {
+                KeyCode::Left | KeyCode::Down => {
+                    if self.stop_bits_selected > 0 {
+                        self.stop_bits_selected -= 1;
+                    }
+                }
+                KeyCode::Right | KeyCode::Up => {
+                    if self.stop_bits_selected < self.stop_bits_options.len() - 1 {
+                        self.stop_bits_selected += 1;
+                    }
+                }
+                _ => {}
+            },
+            // 流控
+            5 => match key.code {
+                KeyCode::Left | KeyCode::Down => {
+                    if self.flow_control_selected > 0 {
+                        self.flow_control_selected -= 1;
+                    }
+                }
+                KeyCode::Right | KeyCode::Up => {
+                    if self.flow_control_selected < self.flow_control_options.len() - 1 {
+                        self.flow_control_selected += 1;
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
+
+        // 如果修改了参数，同步到 serial_settings
+        self.sync_settings();
+
+        // C 键连接/断开（在任何子项下都有效）
+        if key.code == KeyCode::Char('c')
+            && (key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::CONTROL)
+        {
+            self.toggle_connection();
+        }
+    }
+
+    /// 将选中的选项同步到 serial_settings
+    fn sync_settings(&mut self) {
+        if let Some(port) = self.available_ports.get(self.port_selected) {
+            self.serial_settings.port = port.clone();
+        }
+        self.serial_settings.baud_rate = self.current_baud_rate();
+        self.serial_settings.data_bits = self.data_bits_options[self.data_bits_selected];
+        self.serial_settings.parity = self.parity_options[self.parity_selected].to_string();
+        self.serial_settings.stop_bits = self.stop_bits_options[self.stop_bits_selected];
+        self.serial_settings.flow_control =
+            self.flow_control_options[self.flow_control_selected].to_string();
     }
 
     pub fn toggle_connection(&mut self) {
@@ -374,6 +492,39 @@ impl App {
     }
 
     fn handle_quick_send_key(&mut self, key: KeyEvent) {
+        match self.quick_send_mode {
+            QuickSendMode::Adding => {
+                match key.code {
+                    KeyCode::Char(c) => {
+                        self.send_input.push(c);
+                    }
+                    KeyCode::Backspace => {
+                        self.send_input.pop();
+                    }
+                    KeyCode::Enter => {
+                        let input = std::mem::take(&mut self.send_input);
+                        if !input.is_empty() {
+                            let name = if input.len() > 20 {
+                                input[..20].to_string()
+                            } else {
+                                input.clone()
+                            };
+                            self.command_list.add(name, input);
+                            self.command_list.save().ok();
+                            self.quick_send_mode = QuickSendMode::Normal;
+                        }
+                    }
+                    KeyCode::Esc => {
+                        self.send_input.clear();
+                        self.quick_send_mode = QuickSendMode::Normal;
+                    }
+                    _ => {}
+                }
+                return;
+            }
+            QuickSendMode::Normal => {}
+        }
+
         match key.code {
             KeyCode::Up => {
                 if self.quick_send_selected > 0 {
@@ -388,6 +539,21 @@ impl App {
             KeyCode::Enter => {
                 if let Some(cmd) = self.command_list.commands.get(self.quick_send_selected) {
                     self.send_data(cmd.data.clone().into_bytes());
+                }
+            }
+            KeyCode::Char('a') => {
+                self.send_input.clear();
+                self.quick_send_mode = QuickSendMode::Adding;
+            }
+            KeyCode::Char('d') => {
+                if !self.command_list.commands.is_empty() {
+                    self.command_list.remove(self.quick_send_selected);
+                    if self.quick_send_selected >= self.command_list.len()
+                        && self.quick_send_selected > 0
+                    {
+                        self.quick_send_selected -= 1;
+                    }
+                    self.command_list.save().ok();
                 }
             }
             _ => {}

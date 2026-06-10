@@ -1,4 +1,4 @@
-use crate::app::{App, FocusArea};
+use crate::app::{App, FocusArea, QuickSendMode};
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -10,7 +10,7 @@ use ratatui::{
 pub fn render_quick_send(f: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.focus == FocusArea::QuickSend;
 
-    let visible = area.height.saturating_sub(2).max(5) as usize;
+    let visible = area.height.saturating_sub(3).max(5) as usize;
     let start = if app.quick_send_selected >= visible {
         app.quick_send_selected - visible + 1
     } else {
@@ -45,7 +45,30 @@ pub fn render_quick_send(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    if lines.is_empty() {
+    // 底部提示行
+    let hint = match app.quick_send_mode {
+        QuickSendMode::Adding => Span::styled(
+            "输入指令数据后回车 (Esc取消)",
+            Style::default().fg(Color::Yellow),
+        ),
+        QuickSendMode::Normal => {
+            if is_focused {
+                Span::styled(
+                    "a添加 d删除 Enter发送",
+                    Style::default().fg(Color::DarkGray),
+                )
+            } else {
+                Span::raw("")
+            }
+        }
+    };
+
+    let mut all_lines = lines;
+    if !hint.content.is_empty() {
+        all_lines.push(Line::from(hint));
+    }
+
+    if all_lines.is_empty() {
         let paragraph = Paragraph::new(Line::from(Span::styled(
             "\u{6682}\u{65e0}\u{6307}\u{4ee4}",
             Style::default().fg(Color::DarkGray),
@@ -55,7 +78,7 @@ pub fn render_quick_send(f: &mut Frame, app: &App, area: Rect) {
             area,
         );
     } else {
-        let paragraph = Paragraph::new(lines);
+        let paragraph = Paragraph::new(all_lines);
         f.render_widget(
             paragraph.style(Style::default().bg(Color::Rgb(15, 15, 35))),
             area,
