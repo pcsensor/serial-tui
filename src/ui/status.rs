@@ -1,4 +1,4 @@
-use crate::app::{App, FocusArea};
+use crate::app::App;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -25,12 +25,6 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let format_text = format!("\u{683c}\u{5f0f}: {:?}", app.display_format);
     let protocol_text = format!("\u{534f}\u{8bae}: {}", app.parser_registry.active_name());
-    let focus_text = match app.focus {
-        FocusArea::Settings => "\u{7126}\u{70b9}: \u{8bbe}\u{7f6e}\u{680f}",
-        FocusArea::Terminal => "\u{7126}\u{70b9}: \u{6536}\u{53d1}\u{533a}",
-        FocusArea::SendInput => "\u{7126}\u{70b9}: \u{53d1}\u{9001}\u{680f}",
-        FocusArea::QuickSend => "\u{7126}\u{70b9}: \u{5feb}\u{6377}\u{53d1}\u{9001}",
-    };
 
     let line = Line::from(vec![
         Span::raw(" "),
@@ -47,7 +41,6 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw(format!(" | {}", format_text)),
         Span::raw(format!(" | {}", protocol_text)),
-        Span::raw(format!(" | {}", focus_text)),
         Span::raw(" | "),
         Span::styled("Ctrl+Q", Style::default().fg(Color::Yellow)),
         Span::raw(" \u{9000}\u{51fa}  "),
