@@ -736,9 +736,13 @@ mod tests {
     fn test_tab_sets_hint_ticks() {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
         let mut app = App::new();
+        // App::new() 初始 focus 为 Terminal
+        assert_eq!(app.focus, FocusArea::Terminal);
         app.tab_hint_ticks = 0;
         app.handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
         assert_eq!(app.tab_hint_ticks, 20);
+        // Tab 后 Terminal → SendInput
+        assert_eq!(app.focus, FocusArea::SendInput);
     }
 
     #[test]
