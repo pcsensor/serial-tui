@@ -318,12 +318,18 @@ impl App {
                 &line_data
             };
 
-            if trimmed.is_empty() {
-                continue;
-            }
-
             let now = Local::now();
             let timestamp = now.format("%H:%M:%S.%3f").to_string();
+
+            // 空行也添加记录，保证接收区正确换行
+            if trimmed.is_empty() {
+                self.terminal_lines.push(TerminalLine {
+                    timestamp: timestamp.clone(),
+                    is_rx: true,
+                    raw_data: Vec::new(),
+                });
+                continue;
+            }
 
             let formatted = crate::protocol::format::format_bytes(trimmed, self.display_format);
             let display = self
