@@ -389,6 +389,7 @@ impl App {
         self.config.save().ok();
     }
 
+    #[allow(dead_code)]
     fn export_data(&mut self) {
         if self.data_records.is_empty() {
             self.status_message = "\u{65e0}\u{6570}\u{636e}\u{53ef}\u{5bfc}\u{51fa}".to_string();
@@ -476,7 +477,10 @@ impl App {
             ExportFormat::Csv => "csv",
             ExportFormat::Txt => "txt",
         };
-        let dir = dir.trim_end_matches('/').to_string();
+        let dir = {
+            let trimmed = dir.trim_end_matches('/');
+            if trimmed.is_empty() { ".".to_string() } else { trimmed.to_string() }
+        };
         let filename = format!("{}/serial_export_{}.{}", dir, timestamp, ext);
         let result = match format {
             ExportFormat::Csv => crate::export::export_csv(&self.data_records, &filename),
