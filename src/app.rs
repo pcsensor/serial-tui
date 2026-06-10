@@ -153,6 +153,9 @@ impl App {
                 self.serial_manager.enter_reconnect();
             }
             Event::Tick => {
+                if self.tab_hint_ticks > 0 {
+                    self.tab_hint_ticks -= 1;
+                }
                 if self.serial_manager.should_reconnect() {
                     self.status_message = format!(
                         "\u{6b63}\u{5728}\u{91cd}\u{8fde} {}  (\u{7b2c} {} \u{6b21})...",
@@ -236,13 +239,7 @@ impl App {
                     FocusArea::SendInput => FocusArea::QuickSend,
                     FocusArea::QuickSend => FocusArea::Settings,
                 };
-                let focus_name = match self.focus {
-                    FocusArea::Settings => "\u{8bbe}\u{7f6e}\u{680f}",
-                    FocusArea::Terminal => "\u{6536}\u{53d1}\u{533a}",
-                    FocusArea::SendInput => "\u{53d1}\u{9001}\u{680f}",
-                    FocusArea::QuickSend => "\u{5feb}\u{6377}\u{53d1}\u{9001}",
-                };
-                self.status_message = format!("\u{5df2}\u{5207}\u{6362}\u{5230}: {}", focus_name);
+                self.tab_hint_ticks = 20;
                 return;
             }
             _ => {}
@@ -733,5 +730,30 @@ mod tests {
     fn test_initial_export_dialog_is_hidden() {
         let app = App::new();
         assert!(matches!(app.export_dialog, ExportDialogState::Hidden));
+    }
+
+    #[test]
+    fn test_tab_sets_hint_ticks() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.tab_hint_ticks = 0;
+        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
+        assert_eq!(app.tab_hint_ticks, 20);
+    }
+
+    #[test]
+    fn test_tick_decrements_hint_ticks() {
+        let mut app = App::new();
+        app.tab_hint_ticks = 5;
+        app.handle_event(Event::Tick);
+        assert_eq!(app.tab_hint_ticks, 4);
+    }
+
+    #[test]
+    fn test_tick_does_not_underflow() {
+        let mut app = App::new();
+        app.tab_hint_ticks = 0;
+        app.handle_event(Event::Tick);
+        assert_eq!(app.tab_hint_ticks, 0);
     }
 }
