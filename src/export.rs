@@ -8,6 +8,7 @@ pub struct DataRecord {
     pub data: String,
 }
 
+#[allow(dead_code)]
 pub fn export_csv(records: &[DataRecord], path: &str) -> Result<()> {
     let mut file = std::fs::File::create(path)
         .with_context(|| format!("\u{65e0}\u{6cd5}\u{521b}\u{5efa}\u{6587}\u{4ef6} {}", path))?;
@@ -21,6 +22,7 @@ pub fn export_csv(records: &[DataRecord], path: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn export_json(records: &[DataRecord], path: &str) -> Result<()> {
     let content = serde_json::to_string_pretty(records)?;
     std::fs::write(path, content)
@@ -28,6 +30,7 @@ pub fn export_json(records: &[DataRecord], path: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn export_text(records: &[DataRecord], path: &str) -> Result<()> {
     let mut file = std::fs::File::create(path)
         .with_context(|| format!("\u{65e0}\u{6cd5}\u{521b}\u{5efa}\u{6587}\u{4ef6} {}", path))?;

@@ -95,6 +95,7 @@ impl ParserRegistry {
             .unwrap_or("\u{65e0}")
     }
 
+    #[allow(dead_code)]
     pub fn names(&self) -> Vec<String> {
         self.parsers.iter().map(|p| p.name().to_string()).collect()
     }

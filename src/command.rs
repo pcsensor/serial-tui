@@ -55,6 +55,7 @@ impl CommandList {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(&mut self, index: usize, name: String, data: String) -> bool {
         if index < self.commands.len() {
             self.commands[index] = CommandEntry { name, data };
@@ -68,6 +69,7 @@ impl CommandList {
         self.commands.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }

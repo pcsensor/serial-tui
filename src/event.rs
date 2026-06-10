@@ -14,5 +14,6 @@ pub enum Event {
     /// 定时 tick（UI 刷新、自动重连检查）
     Tick,
     /// 退出应用
+    #[allow(dead_code)]
     Quit,
 }

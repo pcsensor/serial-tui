@@ -194,6 +194,14 @@ impl App {
                 return;
             }
             KeyEvent {
+                code: KeyCode::Char('e'),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            } => {
+                self.export_data();
+                return;
+            }
+            KeyEvent {
                 code: KeyCode::Tab, ..
             } => {
                 self.focus = match self.focus {
@@ -202,6 +210,13 @@ impl App {
                     FocusArea::SendInput => FocusArea::QuickSend,
                     FocusArea::QuickSend => FocusArea::Settings,
                 };
+                let focus_name = match self.focus {
+                    FocusArea::Settings => "\u{8bbe}\u{7f6e}\u{680f}",
+                    FocusArea::Terminal => "\u{6536}\u{53d1}\u{533a}",
+                    FocusArea::SendInput => "\u{53d1}\u{9001}\u{680f}",
+                    FocusArea::QuickSend => "\u{5feb}\u{6377}\u{53d1}\u{9001}",
+                };
+                self.status_message = format!("\u{5df2}\u{5207}\u{6362}\u{5230}: {}", focus_name);
                 return;
             }
             _ => {}
@@ -328,6 +343,7 @@ impl App {
         self.write_tx = Some(tx);
     }
 
+    #[allow(dead_code)]
     pub fn write_tx_clone(&self) -> Option<UnboundedSender<Vec<u8>>> {
         self.write_tx.clone()
     }
@@ -337,6 +353,25 @@ impl App {
         self.config.line_ending = self.line_ending;
         self.config.display_format = self.display_format;
         self.config.save().ok();
+    }
+
+    fn export_data(&mut self) {
+        if self.data_records.is_empty() {
+            self.status_message = "\u{65e0}\u{6570}\u{636e}\u{53ef}\u{5bfc}\u{51fa}".to_string();
+            return;
+        }
+
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let filename = format!("serial_export_{}.csv", timestamp);
+
+        match crate::export::export_csv(&self.data_records, &filename) {
+            Ok(_) => {
+                self.status_message = format!("\u{5df2}\u{5bfc}\u{51fa}: {}", filename);
+            }
+            Err(e) => {
+                self.status_message = format!("\u{5bfc}\u{51fa}\u{5931}\u{8d25}: {}", e);
+            }
+        }
     }
 
     fn handle_settings_key(&mut self, key: KeyEvent) {
@@ -652,6 +687,7 @@ impl App {
             .unwrap_or(115200)
     }
 
+    #[allow(dead_code)]
     pub fn baud_rates(&self) -> &[u32] {
         &self.baud_rates
     }

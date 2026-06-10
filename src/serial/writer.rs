@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+#[allow(dead_code)]
 pub fn write_to_port(
     port: &mut Box<dyn serialport::SerialPort>,
     data: &[u8],

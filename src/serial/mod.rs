@@ -117,6 +117,7 @@ impl SerialManager {
             && self.last_port_name.is_some()
     }
 
+    #[allow(dead_code)]
     pub fn port_ref(&self) -> Option<&dyn SerialPort> {
         self.port.as_ref().map(|p| p.as_ref())
     }
