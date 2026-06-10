@@ -1,0 +1,143 @@
+# serial-tui
+
+TUI 串口调试助手 —— 基于 Rust 和 ratatui 构建的跨平台终端串口调试工具，面向嵌入式开发场景。
+
+## 功能特性
+
+- **多格式收发**：支持 HEX / ASCII / Raw 三种显示格式，接收（紫色）和发送（绿色）颜色区分
+- **快捷发送面板**：可增删改查的快捷指令列表，一键发送，支持 JSON 持久化
+- **行尾追加**：发送数据时自动追加 无 / LF (`\n`) / CR (`\r`) / CRLF (`\r\n`)
+- **热插拔与自动重连**：每 2 秒扫描端口列表，设备拔出后自动重连（最多重试 10 次）
+- **结构化协议解析**：内置 Line / JSON / ModbusRTU 解析器，支持运行时切换
+- **数据导出**：支持 CSV / JSON / 纯文本格式导出
+- **配置持久化**：TOML 格式保存串口参数和偏好设置
+- **跨平台**：macOS / Linux / Windows
+
+## 界面布局
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  端口: /dev/ttyUSB0  波特率: 115200  8N1  流控: 无   ● 已连接 │
+├───────────────────────────────────────────────┬──────────────┤
+│  ← [14:32:01.234] AT+GMR                     │ ▶ AT         │
+│  → [14:32:01.456] OK                         │   AT+RST     │
+│  ← [14:32:05.789] 48 65 6C 6C 6F             │   AT+GMR     │
+│                                               │              │
+├───────────────────────────────────────────────┴──────────────┤
+│  发送 [_______________]  行尾: 无 LF CR [CRLF]  [发送]        │
+├──────────────────────────────────────────────────────────────┤
+│  ● 已连接 | RX:1024 TX:512 | 格式:Ascii | 协议:Line | Ctrl+Q  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl + Q` | 退出程序 |
+| `Ctrl + D` | 切换显示格式（HEX → ASCII → Raw） |
+| `Ctrl + L` | 清空收发区 |
+| `Ctrl + P` | 切换协议解析器 |
+| `Ctrl + R` | 重新扫描端口 |
+| `Ctrl + E` | 导出数据 |
+| `Ctrl + C` | 连接 / 断开串口 |
+| `Tab` | 切换焦点区域 |
+| `↑ ↓` | 列表导航 / 浏览快捷指令 |
+| `← →` | 设置栏中切换波特率 |
+| `Enter` | 发送 / 确认选择 |
+
+## 安装
+
+### 前置条件
+
+- Rust 工具链（1.70+）：<https://rustup.rs>
+
+### 源码编译
+
+```bash
+git clone <repo-url>
+cd serial
+cargo build --release
+```
+
+编译产物位于 `target/release/serial-tui`（Windows 下为 `serial-tui.exe`）。
+
+### 直接运行
+
+```bash
+cargo run --release
+```
+
+## 配置文件
+
+配置文件存储在 `~/.config/serial/` 目录下：
+
+| 文件 | 格式 | 内容 |
+|------|------|------|
+| `config.toml` | TOML | 串口参数、行尾偏好、显示格式 |
+| `commands.json` | JSON | 快捷指令列表 |
+
+配置会在程序退出时自动保存，启动时自动加载。
+
+### 配置示例
+
+```toml
+# ~/.config/serial/config.toml
+[serial]
+port = "/dev/ttyUSB0"
+baud_rate = 115200
+data_bits = 8
+parity = "none"
+stop_bits = 1
+flow_control = "none"
+
+line_ending = "CRLF"
+display_format = "Ascii"
+```
+
+## 技术栈
+
+| 组件 | 选型 |
+|------|------|
+| TUI 框架 | ratatui |
+| 终端后端 | crossterm |
+| 异步运行时 | tokio |
+| 串口通信 | serialport |
+| 序列化 | serde + serde_json + toml |
+| 时间处理 | chrono |
+
+## 架构
+
+```
+src/
+├── main.rs               # 入口：TUI 主循环 + 事件任务
+├── app.rs                # 应用全局状态、事件路由、快捷键
+├── event.rs              # 事件枚举
+├── config.rs             # 配置持久化（TOML）
+├── command.rs            # 快捷指令管理（JSON）
+├── export.rs             # 数据导出（CSV/JSON/文本）
+├── protocol/
+│   ├── format.rs         # 显示格式：HEX / ASCII / Raw
+│   └── parser.rs         # 协议解析 trait + 内置解析器
+├── serial/
+│   ├── mod.rs            # 串口管理：枚举、连接、热插拔重连
+│   ├── reader.rs         # 异步读取任务
+│   └── writer.rs         # 写入 + 行尾追加
+└── ui/
+    ├── mod.rs            # 主布局组装
+    ├── settings.rs       # 串口设置栏
+    ├── terminal.rs       # 数据收发区
+    ├── send_input.rs     # 发送输入栏
+    ├── quick_send.rs     # 快捷发送侧面板
+    └── status.rs         # 状态栏
+```
+
+## 运行测试
+
+```bash
+cargo test
+```
+
+## 许可证
+
+MIT
