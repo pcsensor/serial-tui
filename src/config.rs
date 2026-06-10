@@ -76,9 +76,18 @@ fn default_line_ending() -> LineEnding {
 }
 
 impl AppConfig {
-    fn config_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    fn config_dir() -> PathBuf {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        let mut path = PathBuf::from(home);
+        path.push(".config");
         path.push("serial");
+        path
+    }
+
+    fn config_path() -> PathBuf {
+        let mut path = Self::config_dir();
         path.push("config.toml");
         path
     }
@@ -86,7 +95,14 @@ impl AppConfig {
     pub fn load() -> Result<Self> {
         let path = Self::config_path();
         if !path.exists() {
-            return Ok(Self::default());
+            let config = Self::default();
+            // 首次启动时预创建默认配置目录和文件
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let content = toml::to_string_pretty(&config)?;
+            std::fs::write(&path, content)?;
+            return Ok(config);
         }
         let content = std::fs::read_to_string(&path)?;
         let config: AppConfig = toml::from_str(&content)?;

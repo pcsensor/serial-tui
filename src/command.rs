@@ -16,9 +16,18 @@ pub struct CommandList {
 }
 
 impl CommandList {
-    fn storage_path() -> PathBuf {
-        let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    fn storage_dir() -> PathBuf {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        let mut path = PathBuf::from(home);
+        path.push(".config");
         path.push("serial");
+        path
+    }
+
+    fn storage_path() -> PathBuf {
+        let mut path = Self::storage_dir();
         path.push("commands.json");
         path
     }
@@ -26,7 +35,13 @@ impl CommandList {
     pub fn load() -> Result<Self> {
         let path = Self::storage_path();
         if !path.exists() {
-            return Ok(Self::default());
+            let list = Self::default();
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let content = serde_json::to_string_pretty(&list)?;
+            std::fs::write(&path, content)?;
+            return Ok(list);
         }
         let content = std::fs::read_to_string(&path)?;
         let list: CommandList = serde_json::from_str(&content)?;

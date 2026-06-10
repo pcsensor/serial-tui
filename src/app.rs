@@ -100,6 +100,41 @@ impl App {
         let config = AppConfig::load().unwrap_or_default();
         let command_list = CommandList::load().unwrap_or_default();
 
+        let available_ports = SerialManager::list_ports();
+        let baud_rates = vec![
+            300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600,
+        ];
+        let data_bits_options: Vec<u8> = vec![5, 6, 7, 8];
+        let parity_options: Vec<&'static str> = vec!["none", "odd", "even"];
+        let stop_bits_options: Vec<u8> = vec![1, 2];
+        let flow_control_options: Vec<&'static str> = vec!["none", "hardware", "software"];
+
+        // 根据配置文件初始化选择索引
+        let port_selected = available_ports
+            .iter()
+            .position(|p| *p == config.serial.port)
+            .unwrap_or(0);
+        let baud_rate_selected = baud_rates
+            .iter()
+            .position(|&b| b == config.serial.baud_rate)
+            .unwrap_or(6); // 默认 115200
+        let data_bits_selected = data_bits_options
+            .iter()
+            .position(|&b| b == config.serial.data_bits)
+            .unwrap_or(3); // 默认 8
+        let parity_selected = parity_options
+            .iter()
+            .position(|&p| p == &config.serial.parity)
+            .unwrap_or(0); // 默认 none
+        let stop_bits_selected = stop_bits_options
+            .iter()
+            .position(|&b| b == config.serial.stop_bits)
+            .unwrap_or(0); // 默认 1
+        let flow_control_selected = flow_control_options
+            .iter()
+            .position(|&f| f == &config.serial.flow_control)
+            .unwrap_or(0); // 默认 none
+
         Self {
             serial_manager: SerialManager::new(),
             terminal_lines: Vec::new(),
@@ -114,18 +149,18 @@ impl App {
             command_list,
             quick_send_selected: 0,
             quick_send_mode: QuickSendMode::Normal,
-            available_ports: SerialManager::list_ports(),
-            port_selected: 0,
-            baud_rate_selected: 6,
+            available_ports,
+            port_selected,
+            baud_rate_selected,
             settings_sub_index: 0,
-            data_bits_options: vec![5, 6, 7, 8],
-            data_bits_selected: 3, // 默认 8
-            parity_options: vec!["none", "odd", "even"],
-            parity_selected: 0, // 默认 none
-            stop_bits_options: vec![1, 2],
-            stop_bits_selected: 0, // 默认 1
-            flow_control_options: vec!["none", "hardware", "software"],
-            flow_control_selected: 0, // 默认 none
+            data_bits_options,
+            data_bits_selected,
+            parity_options,
+            parity_selected,
+            stop_bits_options,
+            stop_bits_selected,
+            flow_control_options,
+            flow_control_selected,
             parser_registry: ParserRegistry::default_parsers(),
             running: true,
             config,
@@ -135,9 +170,7 @@ impl App {
             tx_bytes: 0,
             status_message: String::new(),
             write_tx: None,
-            baud_rates: vec![
-                300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600,
-            ],
+            baud_rates,
         }
     }
 

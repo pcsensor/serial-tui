@@ -15,7 +15,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::backend::CrosstermBackend;
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -29,14 +29,16 @@ async fn main() -> Result<()> {
     let mut app = App::new();
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
-    let tx_clone = event_tx.clone();
 
-    // 键盘事件 task
-    tokio::spawn(async move {
-        loop {
+    // 键盘事件线程（同步阻塞，用 std::thread + AtomicBool 取消）
+    let key_running = Arc::new(AtomicBool::new(true));
+    let key_running_clone = key_running.clone();
+    let key_tx = event_tx.clone();
+    let key_thread = std::thread::spawn(move || {
+        while key_running_clone.load(std::sync::atomic::Ordering::Relaxed) {
             if crossterm::event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
                 if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
-                    if tx_clone.send(Event::Key(key)).is_err() {
+                    if key_tx.send(Event::Key(key)).is_err() {
                         break;
                     }
                 }
@@ -46,7 +48,7 @@ async fn main() -> Result<()> {
 
     // Tick task（每 100ms）
     let tick_tx = event_tx.clone();
-    tokio::spawn(async move {
+    let tick_handle = tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             if tick_tx.send(Event::Tick).is_err() {
@@ -57,7 +59,7 @@ async fn main() -> Result<()> {
 
     // 端口扫描 task（每 2 秒）
     let port_tx = event_tx.clone();
-    tokio::spawn(async move {
+    let port_handle = tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             if port_tx.send(Event::PortsChanged).is_err() {
@@ -141,15 +143,20 @@ async fn main() -> Result<()> {
         })?;
     }
 
-    // 清理：停止 reader
+    // 清理：停止 reader 和所有后台 task
     if let Some(running) = reader_running {
         *running.lock().unwrap() = false;
     }
     if let Some(handle) = reader_handle {
         handle.abort();
     }
+    key_running.store(false, std::sync::atomic::Ordering::Relaxed);
+    tick_handle.abort();
+    port_handle.abort();
 
     disable_raw_mode()?;
+    // 终端恢复正常模式后，键盘线程的 poll() 能快速返回
+    let _ = key_thread.join();
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
