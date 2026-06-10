@@ -22,6 +22,28 @@ pub enum QuickSendMode {
     Adding,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportFormat {
+    Csv,
+    Txt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportField {
+    Format,
+    Dir,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportDialogState {
+    Hidden,
+    Open {
+        format: ExportFormat,
+        dir: String,
+        field: ExportField,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct TerminalLine {
     pub timestamp: String,
@@ -65,6 +87,8 @@ pub struct App {
     pub running: bool,
     pub config: AppConfig,
     pub rx_bytes: u64,
+    pub tab_hint_ticks: u8,
+    pub export_dialog: ExportDialogState,
     pub tx_bytes: u64,
     pub status_message: String,
     write_tx: Option<UnboundedSender<Vec<u8>>>,
@@ -106,6 +130,8 @@ impl App {
             running: true,
             config,
             rx_bytes: 0,
+            tab_hint_ticks: 0,
+            export_dialog: ExportDialogState::Hidden,
             tx_bytes: 0,
             status_message: String::new(),
             write_tx: None,
@@ -690,5 +716,22 @@ impl App {
     #[allow(dead_code)]
     pub fn baud_rates(&self) -> &[u32] {
         &self.baud_rates
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_initial_tab_hint_ticks_is_zero() {
+        let app = App::new();
+        assert_eq!(app.tab_hint_ticks, 0);
+    }
+
+    #[test]
+    fn test_initial_export_dialog_is_hidden() {
+        let app = App::new();
+        assert!(matches!(app.export_dialog, ExportDialogState::Hidden));
     }
 }
