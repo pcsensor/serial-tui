@@ -68,6 +68,9 @@ pub fn render_export_dialog(f: &mut Frame, app: &App) {
     let area = f.area();
     let w = 44u16;
     let h = 7u16;
+    if area.width < w || area.height < h {
+        return;
+    }
     let x = area.x + area.width.saturating_sub(w) / 2;
     let y = area.y + area.height.saturating_sub(h) / 2;
     let rect = Rect::new(x, y, w.min(area.width), h.min(area.height));
