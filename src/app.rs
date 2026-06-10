@@ -173,17 +173,28 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
-        match key {
+        // Ctrl+Q 始终退出，即使对话框打开时也有效
+        if matches!(
+            key,
             KeyEvent {
                 code: KeyCode::Char('q'),
                 modifiers: KeyModifiers::CONTROL,
                 ..
-            } => {
-                self.save_config();
-                self.command_list.save().ok();
-                self.running = false;
-                return;
             }
+        ) {
+            self.save_config();
+            self.command_list.save().ok();
+            self.running = false;
+            return;
+        }
+
+        // 导出对话框打开时拦截所有其他按键
+        if let ExportDialogState::Open { .. } = &self.export_dialog {
+            self.handle_export_dialog_key(key);
+            return;
+        }
+
+        match key {
             KeyEvent {
                 code: KeyCode::Char('d'),
                 modifiers: KeyModifiers::CONTROL,
@@ -227,7 +238,7 @@ impl App {
                 modifiers: KeyModifiers::CONTROL,
                 ..
             } => {
-                self.export_data();
+                self.open_export_dialog();
                 return;
             }
             KeyEvent {
@@ -395,6 +406,86 @@ impl App {
                 self.status_message = format!("\u{5bfc}\u{51fa}\u{5931}\u{8d25}: {}", e);
             }
         }
+    }
+
+    fn open_export_dialog(&mut self) {
+        if self.data_records.is_empty() {
+            self.status_message = "无数据可导出".to_string();
+            return;
+        }
+        self.export_dialog = ExportDialogState::Open {
+            format: ExportFormat::Csv,
+            dir: "./".to_string(),
+            field: ExportField::Format,
+        };
+    }
+
+    fn handle_export_dialog_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.export_dialog = ExportDialogState::Hidden;
+            }
+            KeyCode::Enter => {
+                let (format, dir) = if let ExportDialogState::Open { format, dir, .. } = &self.export_dialog {
+                    (*format, dir.clone())
+                } else {
+                    return;
+                };
+                self.export_dialog = ExportDialogState::Hidden;
+                self.do_export(format, dir);
+            }
+            KeyCode::Tab => {
+                if let ExportDialogState::Open { format, .. } = &mut self.export_dialog {
+                    *format = match format {
+                        ExportFormat::Csv => ExportFormat::Txt,
+                        ExportFormat::Txt => ExportFormat::Csv,
+                    };
+                }
+            }
+            KeyCode::Down => {
+                if let ExportDialogState::Open { field, .. } = &mut self.export_dialog {
+                    *field = ExportField::Dir;
+                }
+            }
+            KeyCode::Up => {
+                if let ExportDialogState::Open { field, .. } = &mut self.export_dialog {
+                    *field = ExportField::Format;
+                }
+            }
+            KeyCode::Char(c) => {
+                if let ExportDialogState::Open { field, dir, .. } = &mut self.export_dialog {
+                    if *field == ExportField::Dir {
+                        dir.push(c);
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if let ExportDialogState::Open { field, dir, .. } = &mut self.export_dialog {
+                    if *field == ExportField::Dir {
+                        dir.pop();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn do_export(&mut self, format: ExportFormat, dir: String) {
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let ext = match format {
+            ExportFormat::Csv => "csv",
+            ExportFormat::Txt => "txt",
+        };
+        let dir = dir.trim_end_matches('/').to_string();
+        let filename = format!("{}/serial_export_{}.{}", dir, timestamp, ext);
+        let result = match format {
+            ExportFormat::Csv => crate::export::export_csv(&self.data_records, &filename),
+            ExportFormat::Txt => crate::export::export_text(&self.data_records, &filename),
+        };
+        self.status_message = match result {
+            Ok(_) => format!("已导出: {}", filename),
+            Err(e) => format!("导出失败: {}", e),
+        };
     }
 
     fn handle_settings_key(&mut self, key: KeyEvent) {
@@ -759,5 +850,76 @@ mod tests {
         app.tab_hint_ticks = 0;
         app.handle_event(Event::Tick);
         assert_eq!(app.tab_hint_ticks, 0);
+    }
+
+    #[test]
+    fn test_ctrl_e_no_data_no_dialog() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('e'), KeyModifiers::CONTROL,
+        )));
+        assert!(matches!(app.export_dialog, ExportDialogState::Hidden));
+        assert!(!app.status_message.is_empty());
+    }
+
+    #[test]
+    fn test_ctrl_e_with_data_opens_dialog() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.data_records.push(crate::export::DataRecord {
+            time: "12:00:00.000".into(),
+            dir: "RX".into(),
+            data: "test".into(),
+        });
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('e'), KeyModifiers::CONTROL,
+        )));
+        assert!(matches!(app.export_dialog, ExportDialogState::Open { .. }));
+    }
+
+    #[test]
+    fn test_export_dialog_tab_switches_format() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.export_dialog = ExportDialogState::Open {
+            format: ExportFormat::Csv,
+            dir: "./".to_string(),
+            field: ExportField::Format,
+        };
+        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
+        assert!(matches!(
+            app.export_dialog,
+            ExportDialogState::Open { format: ExportFormat::Txt, .. }
+        ));
+    }
+
+    #[test]
+    fn test_export_dialog_esc_closes() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.export_dialog = ExportDialogState::Open {
+            format: ExportFormat::Csv,
+            dir: "./".to_string(),
+            field: ExportField::Format,
+        };
+        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)));
+        assert!(matches!(app.export_dialog, ExportDialogState::Hidden));
+    }
+
+    #[test]
+    fn test_export_dialog_dir_input() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.export_dialog = ExportDialogState::Open {
+            format: ExportFormat::Csv,
+            dir: "~/".to_string(),
+            field: ExportField::Dir,
+        };
+        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)));
+        assert!(matches!(
+            &app.export_dialog,
+            ExportDialogState::Open { dir, .. } if dir == "~/x"
+        ));
     }
 }
