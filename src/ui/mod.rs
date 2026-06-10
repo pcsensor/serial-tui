@@ -1,8 +1,8 @@
+pub mod overlay;
 pub mod quick_send;
 pub mod send_input;
 pub mod settings;
 pub mod status;
-pub mod overlay;
 pub mod terminal;
 
 use crate::app::App;
@@ -36,4 +36,5 @@ pub fn render(f: &mut Frame, app: &App) {
     status::render_status_bar(f, app, main_chunks[3]);
     overlay::render_tab_hint(f, app, middle_row[0]);
     overlay::render_export_dialog(f, app);
+    overlay::render_command_dialog(f, app);
 }

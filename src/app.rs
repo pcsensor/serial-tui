@@ -17,12 +17,6 @@ pub enum FocusArea {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QuickSendMode {
-    Normal,
-    Adding,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportFormat {
     Csv,
     Txt,
@@ -34,6 +28,12 @@ pub enum ExportField {
     Dir,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandField {
+    Name,
+    Data,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportDialogState {
     Hidden,
@@ -41,6 +41,16 @@ pub enum ExportDialogState {
         format: ExportFormat,
         dir: String,
         field: ExportField,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandDialogState {
+    Hidden,
+    Open {
+        name: String,
+        data: String,
+        field: CommandField,
     },
 }
 
@@ -65,7 +75,7 @@ pub struct App {
     pub send_input: String,
     pub command_list: CommandList,
     pub quick_send_selected: usize,
-    pub quick_send_mode: QuickSendMode,
+    pub command_dialog: CommandDialogState,
     pub available_ports: Vec<String>,
     pub port_selected: usize,
     pub baud_rate_selected: usize,
@@ -148,7 +158,7 @@ impl App {
             send_input: String::new(),
             command_list,
             quick_send_selected: 0,
-            quick_send_mode: QuickSendMode::Normal,
+            command_dialog: CommandDialogState::Hidden,
             available_ports,
             port_selected,
             baud_rate_selected,
@@ -224,6 +234,12 @@ impl App {
         // 导出对话框打开时拦截所有其他按键
         if let ExportDialogState::Open { .. } = &self.export_dialog {
             self.handle_export_dialog_key(key);
+            return;
+        }
+
+        // 添加快捷指令对话框打开时拦截所有其他按键
+        if let CommandDialogState::Open { .. } = &self.command_dialog {
+            self.handle_command_dialog_key(key);
             return;
         }
 
@@ -466,11 +482,12 @@ impl App {
                 self.export_dialog = ExportDialogState::Hidden;
             }
             KeyCode::Enter => {
-                let (format, dir) = if let ExportDialogState::Open { format, dir, .. } = &self.export_dialog {
-                    (*format, dir.clone())
-                } else {
-                    return;
-                };
+                let (format, dir) =
+                    if let ExportDialogState::Open { format, dir, .. } = &self.export_dialog {
+                        (*format, dir.clone())
+                    } else {
+                        return;
+                    };
                 self.export_dialog = ExportDialogState::Hidden;
                 self.do_export(format, dir);
             }
@@ -510,6 +527,88 @@ impl App {
         }
     }
 
+    fn open_command_dialog(&mut self) {
+        self.command_dialog = CommandDialogState::Open {
+            name: String::new(),
+            data: String::new(),
+            field: CommandField::Name,
+        };
+    }
+
+    fn handle_command_dialog_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.command_dialog = CommandDialogState::Hidden;
+            }
+            KeyCode::Enter => {
+                let (name, data) =
+                    if let CommandDialogState::Open { name, data, .. } = &self.command_dialog {
+                        (name.trim().to_string(), data.trim().to_string())
+                    } else {
+                        return;
+                    };
+
+                if name.is_empty() {
+                    if let CommandDialogState::Open { field, .. } = &mut self.command_dialog {
+                        *field = CommandField::Name;
+                    }
+                    self.status_message = "请输入指令名称".to_string();
+                    return;
+                }
+                if data.is_empty() {
+                    if let CommandDialogState::Open { field, .. } = &mut self.command_dialog {
+                        *field = CommandField::Data;
+                    }
+                    self.status_message = "请输入指令数据".to_string();
+                    return;
+                }
+
+                self.command_list.add(name, data);
+                self.command_list.save().ok();
+                self.command_dialog = CommandDialogState::Hidden;
+                self.status_message = "已添加快捷指令".to_string();
+                if self.command_list.len() > 0 {
+                    self.quick_send_selected = self.command_list.len() - 1;
+                }
+            }
+            KeyCode::Tab | KeyCode::Down | KeyCode::Up => {
+                if let CommandDialogState::Open { field, .. } = &mut self.command_dialog {
+                    *field = match field {
+                        CommandField::Name => CommandField::Data,
+                        CommandField::Data => CommandField::Name,
+                    };
+                }
+            }
+            KeyCode::Char(c) => {
+                if let CommandDialogState::Open {
+                    name, data, field, ..
+                } = &mut self.command_dialog
+                {
+                    match field {
+                        CommandField::Name => name.push(c),
+                        CommandField::Data => data.push(c),
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if let CommandDialogState::Open {
+                    name, data, field, ..
+                } = &mut self.command_dialog
+                {
+                    match field {
+                        CommandField::Name => {
+                            name.pop();
+                        }
+                        CommandField::Data => {
+                            data.pop();
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn do_export(&mut self, format: ExportFormat, dir: String) {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
         let ext = match format {
@@ -518,7 +617,11 @@ impl App {
         };
         let dir = {
             let trimmed = dir.trim_end_matches('/');
-            if trimmed.is_empty() { ".".to_string() } else { trimmed.to_string() }
+            if trimmed.is_empty() {
+                ".".to_string()
+            } else {
+                trimmed.to_string()
+            }
         };
         let filename = format!("{}/serial_export_{}.{}", dir, timestamp, ext);
         let result = match format {
@@ -769,39 +872,6 @@ impl App {
     }
 
     fn handle_quick_send_key(&mut self, key: KeyEvent) {
-        match self.quick_send_mode {
-            QuickSendMode::Adding => {
-                match key.code {
-                    KeyCode::Char(c) => {
-                        self.send_input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        self.send_input.pop();
-                    }
-                    KeyCode::Enter => {
-                        let input = std::mem::take(&mut self.send_input);
-                        if !input.is_empty() {
-                            let name = if input.len() > 20 {
-                                input[..20].to_string()
-                            } else {
-                                input.clone()
-                            };
-                            self.command_list.add(name, input);
-                            self.command_list.save().ok();
-                            self.quick_send_mode = QuickSendMode::Normal;
-                        }
-                    }
-                    KeyCode::Esc => {
-                        self.send_input.clear();
-                        self.quick_send_mode = QuickSendMode::Normal;
-                    }
-                    _ => {}
-                }
-                return;
-            }
-            QuickSendMode::Normal => {}
-        }
-
         match key.code {
             KeyCode::Up => {
                 if self.quick_send_selected > 0 {
@@ -819,8 +889,7 @@ impl App {
                 }
             }
             KeyCode::Char('a') => {
-                self.send_input.clear();
-                self.quick_send_mode = QuickSendMode::Adding;
+                self.open_command_dialog();
             }
             KeyCode::Char('d') => {
                 if !self.command_list.commands.is_empty() {
@@ -900,7 +969,8 @@ mod tests {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
         let mut app = App::new();
         app.handle_event(Event::Key(KeyEvent::new(
-            KeyCode::Char('e'), KeyModifiers::CONTROL,
+            KeyCode::Char('e'),
+            KeyModifiers::CONTROL,
         )));
         assert!(matches!(app.export_dialog, ExportDialogState::Hidden));
         assert!(!app.status_message.is_empty());
@@ -916,7 +986,8 @@ mod tests {
             data: "test".into(),
         });
         app.handle_event(Event::Key(KeyEvent::new(
-            KeyCode::Char('e'), KeyModifiers::CONTROL,
+            KeyCode::Char('e'),
+            KeyModifiers::CONTROL,
         )));
         assert!(matches!(app.export_dialog, ExportDialogState::Open { .. }));
     }
@@ -933,7 +1004,10 @@ mod tests {
         app.handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
         assert!(matches!(
             app.export_dialog,
-            ExportDialogState::Open { format: ExportFormat::Txt, .. }
+            ExportDialogState::Open {
+                format: ExportFormat::Txt,
+                ..
+            }
         ));
     }
 
@@ -959,10 +1033,90 @@ mod tests {
             dir: "~/".to_string(),
             field: ExportField::Dir,
         };
-        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)));
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::NONE,
+        )));
         assert!(matches!(
             &app.export_dialog,
             ExportDialogState::Open { dir, .. } if dir == "~/x"
         ));
+    }
+
+    #[test]
+    fn test_quick_send_add_opens_command_dialog() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.focus = FocusArea::QuickSend;
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+        )));
+        assert!(matches!(
+            app.command_dialog,
+            CommandDialogState::Open {
+                field: CommandField::Name,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_command_dialog_adds_name_and_data() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.command_dialog = CommandDialogState::Open {
+            name: String::new(),
+            data: String::new(),
+            field: CommandField::Name,
+        };
+
+        for c in "RST".chars() {
+            app.handle_event(Event::Key(KeyEvent::new(
+                KeyCode::Char(c),
+                KeyModifiers::NONE,
+            )));
+        }
+        app.handle_event(Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
+        for c in "AT+RST".chars() {
+            app.handle_event(Event::Key(KeyEvent::new(
+                KeyCode::Char(c),
+                KeyModifiers::NONE,
+            )));
+        }
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert!(matches!(app.command_dialog, CommandDialogState::Hidden));
+        let cmd = app.command_list.commands.last().unwrap();
+        assert_eq!(cmd.name, "RST");
+        assert_eq!(cmd.data, "AT+RST");
+    }
+
+    #[test]
+    fn test_command_dialog_requires_data() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut app = App::new();
+        app.command_dialog = CommandDialogState::Open {
+            name: "PING".to_string(),
+            data: String::new(),
+            field: CommandField::Name,
+        };
+
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert!(matches!(
+            app.command_dialog,
+            CommandDialogState::Open {
+                field: CommandField::Data,
+                ..
+            }
+        ));
+        assert_eq!(app.status_message, "请输入指令数据");
     }
 }
