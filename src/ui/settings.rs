@@ -34,93 +34,44 @@ pub fn render_settings_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let mut spans = Vec::new();
     spans.push(Span::raw(" "));
-    spans.push(Span::styled(
-        format!(
-            "{}\u{7aef}\u{53e3} ",
-            if is_focused && sub == 0 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
-        hl(0),
-    ));
-    spans.push(Span::styled(port_display, hl(0)));
 
-    spans.push(Span::raw("  "));
+    // [p]端口
+    spans.push(Span::styled("[p]\u{7aef}\u{53e3}", hl(0)));
+    spans.push(Span::styled(format!(" {} ", port_display), hl(0)));
+
+    // [b]波特率
+    spans.push(Span::styled("[b]\u{6ce2}\u{7279}\u{7387}", hl(1)));
     spans.push(Span::styled(
-        format!(
-            "{}\u{6ce2}\u{7279}\u{7387} ",
-            if is_focused && sub == 1 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
+        format!(" {} ", app.current_baud_rate()),
         hl(1),
     ));
-    spans.push(Span::styled(format!("{}", app.current_baud_rate()), hl(1)));
 
-    spans.push(Span::raw("  "));
-    spans.push(Span::styled(
-        format!(
-            "{}\u{6570}\u{636e}\u{4f4d} ",
-            if is_focused && sub == 2 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
-        hl(2),
-    ));
-    spans.push(Span::styled(format!("{}", data_bits), hl(2)));
+    // [d]数据位
+    spans.push(Span::styled("[d]\u{6570}\u{636e}\u{4f4d}", hl(2)));
+    spans.push(Span::styled(format!(" {} ", data_bits), hl(2)));
 
-    spans.push(Span::raw(" "));
-    spans.push(Span::styled(
-        format!(
-            "{}\u{6821}\u{9a8c} ",
-            if is_focused && sub == 3 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
-        hl(3),
-    ));
-    spans.push(Span::styled(parity, hl(3)));
+    // [y]校验位
+    spans.push(Span::styled("[y]\u{6821}\u{9a8c}", hl(3)));
+    spans.push(Span::styled(format!(" {} ", parity), hl(3)));
 
-    spans.push(Span::raw(" "));
-    spans.push(Span::styled(
-        format!(
-            "{}\u{505c}\u{6b62}\u{4f4d} ",
-            if is_focused && sub == 4 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
-        hl(4),
-    ));
-    spans.push(Span::styled(format!("{}", stop_bits), hl(4)));
+    // [s]停止位
+    spans.push(Span::styled("[s]\u{505c}\u{6b62}\u{4f4d}", hl(4)));
+    spans.push(Span::styled(format!(" {} ", stop_bits), hl(4)));
 
-    spans.push(Span::raw("  "));
+    // [f]流控
+    spans.push(Span::styled("[f]\u{6d41}\u{63a7}", hl(5)));
+    spans.push(Span::styled(format!(" {} ", flow_control), hl(5)));
+
+    // [c]连接
     spans.push(Span::styled(
-        format!(
-            "{}\u{6d41}\u{63a7} ",
-            if is_focused && sub == 5 {
-                "\u{25b6}"
-            } else {
-                ""
-            }
-        ),
-        hl(5),
+        "[c]\u{8fde}\u{63a5}",
+        Style::default().fg(Color::Green),
     ));
-    spans.push(Span::styled(flow_control, hl(5)));
 
     if is_focused {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "Tab切换 \u{2190}\u{2192}\u{6539}\u{503c} C\u{8fde}\u{63a5}",
+            "\u{2191}\u{2193}\u{6539}\u{503c}",
             Style::default().fg(Color::DarkGray),
         ));
     }

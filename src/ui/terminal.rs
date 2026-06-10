@@ -1,5 +1,4 @@
-use crate::app::App;
-use crate::protocol::format::format_bytes;
+use crate::app::{App, FocusArea};
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
@@ -9,6 +8,8 @@ use ratatui::{
 };
 
 pub fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
+    let is_focused = app.focus == FocusArea::Terminal;
+
     let line_count = area.height.saturating_sub(2) as usize;
     let total = app.terminal_lines.len();
     let start = if total > line_count {
@@ -31,7 +32,8 @@ pub fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 Color::Rgb(129, 199, 132)
             };
-            let formatted = format_bytes(&entry.raw_data, app.display_format);
+            let formatted =
+                crate::protocol::format::format_bytes(&entry.raw_data, app.display_format);
             Line::from(Span::styled(
                 format!("{} [{}] {}", direction, entry.timestamp, formatted),
                 Style::default().fg(color),
@@ -41,15 +43,27 @@ pub fn render_terminal(f: &mut Frame, app: &App, area: Rect) {
 
     let paragraph = if lines.is_empty() {
         Paragraph::new(Line::from(Span::styled(
-            "\u{7b49}\u{5f85}\u{4e32}\u{53e3}\u{6570}\u{636e}...",
+            "\u{7b49}\u{5f85}\u{4e32}\u{53e3}\u{6570}\u{636e}... (\u{6309} \u{2191}\u{2193} \u{6eda}\u{52a8})",
             Style::default().fg(Color::DarkGray),
         )))
     } else {
         Paragraph::new(lines).wrap(Wrap { trim: false })
     };
 
+    let border_style = if is_focused {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default()
+    };
+
     f.render_widget(
-        paragraph.style(Style::default().bg(Color::Rgb(15, 15, 35))),
+        paragraph
+            .style(Style::default().bg(Color::Rgb(15, 15, 35)))
+            .block(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::NONE)
+                    .style(border_style),
+            ),
         area,
     );
 }

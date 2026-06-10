@@ -58,7 +58,7 @@ pub fn render_send_input(f: &mut Frame, app: &App, area: Rect) {
         };
 
         spans.push(Span::raw("  "));
-        spans.push(Span::raw("\u{884c}\u{5c3e} "));
+        spans.push(Span::raw("[l]\u{884c}\u{5c3e} "));
 
         for (i, name) in line_ending_options.iter().enumerate() {
             let style = if i == current_le {
@@ -71,7 +71,7 @@ pub fn render_send_input(f: &mut Frame, app: &App, area: Rect) {
 
         spans.push(Span::raw(" "));
         spans.push(Span::styled(
-            "[\u{53d1}\u{9001}]",
+            "[Enter \u{53d1}\u{9001}]",
             Style::default()
                 .fg(Color::White)
                 .bg(Color::Rgb(21, 101, 192)),
@@ -79,7 +79,7 @@ pub fn render_send_input(f: &mut Frame, app: &App, area: Rect) {
     } else {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "[Enter保存 Esc取消]",
+            "[Enter\u{4fdd}\u{5b58} Esc\u{53d6}\u{6d88}]",
             Style::default().fg(Color::Yellow),
         ));
     }

@@ -35,6 +35,8 @@ pub struct App {
     pub data_records: Vec<DataRecord>,
     pub scroll_offset: usize,
     pub focus: FocusArea,
+    /// 接收数据缓冲区（用于按 \n 分行）
+    pub rx_buffer: Vec<u8>,
     pub serial_settings: SerialSettings,
     pub display_format: DisplayFormat,
     pub line_ending: LineEnding,
@@ -80,6 +82,7 @@ impl App {
             data_records: Vec::new(),
             scroll_offset: 0,
             focus: FocusArea::Terminal,
+            rx_buffer: Vec::new(),
             serial_settings: config.serial.clone(),
             display_format: config.display_format,
             line_ending: config.line_ending,
@@ -214,26 +217,75 @@ impl App {
 
     fn handle_rx_data(&mut self, data: Vec<u8>) {
         self.rx_bytes += data.len() as u64;
-        let now = Local::now();
-        let timestamp = now.format("%H:%M:%S.%3f").to_string();
 
-        let formatted = crate::protocol::format::format_bytes(&data, self.display_format);
-        let display = self
-            .parser_registry
-            .parse(&data)
-            .unwrap_or(formatted.clone());
+        // 追加到缓冲区
+        self.rx_buffer.extend_from_slice(&data);
 
-        self.terminal_lines.push(TerminalLine {
-            timestamp: timestamp.clone(),
-            is_rx: true,
-            raw_data: data.clone(),
-        });
+        // 按 \n 分割处理
+        while let Some(pos) = self.rx_buffer.iter().position(|&b| b == b'\n') {
+            let line_data: Vec<u8> = self.rx_buffer.drain(..=pos).collect();
+            // 移除末尾的 \n（和可能的 \r）
+            let trimmed = if line_data.len() >= 2
+                && line_data[line_data.len() - 2] == b'\r'
+                && line_data[line_data.len() - 1] == b'\n'
+            {
+                &line_data[..line_data.len() - 2]
+            } else if line_data.last() == Some(&b'\n') {
+                &line_data[..line_data.len() - 1]
+            } else {
+                &line_data
+            };
 
-        self.data_records.push(DataRecord {
-            time: timestamp,
-            dir: "RX".into(),
-            data: display,
-        });
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let now = Local::now();
+            let timestamp = now.format("%H:%M:%S.%3f").to_string();
+
+            let formatted = crate::protocol::format::format_bytes(trimmed, self.display_format);
+            let display = self
+                .parser_registry
+                .parse(trimmed)
+                .unwrap_or(formatted.clone());
+
+            self.terminal_lines.push(TerminalLine {
+                timestamp: timestamp.clone(),
+                is_rx: true,
+                raw_data: trimmed.to_vec(),
+            });
+
+            self.data_records.push(DataRecord {
+                time: timestamp,
+                dir: "RX".into(),
+                data: display,
+            });
+        }
+
+        // 如果缓冲区超过 4KB 且没有换行，强制显示
+        if self.rx_buffer.len() > 4096 {
+            let now = Local::now();
+            let timestamp = now.format("%H:%M:%S.%3f").to_string();
+            let data = std::mem::take(&mut self.rx_buffer);
+
+            let formatted = crate::protocol::format::format_bytes(&data, self.display_format);
+            let display = self
+                .parser_registry
+                .parse(&data)
+                .unwrap_or(formatted.clone());
+
+            self.terminal_lines.push(TerminalLine {
+                timestamp: timestamp.clone(),
+                is_rx: true,
+                raw_data: data,
+            });
+
+            self.data_records.push(DataRecord {
+                time: timestamp,
+                dir: "RX".into(),
+                data: display,
+            });
+        }
 
         if self.scroll_offset > 0 {
             self.scroll_offset = 0;
@@ -288,111 +340,143 @@ impl App {
     }
 
     fn handle_settings_key(&mut self, key: KeyEvent) {
-        // Tab 切换设置栏子项
-        if key.code == KeyCode::Tab {
-            self.settings_sub_index = (self.settings_sub_index + 1) % 6;
-            return;
-        }
-
-        match self.settings_sub_index {
-            // 端口选择
-            0 => match key.code {
-                KeyCode::Up => {
-                    if self.port_selected > 0 {
-                        self.port_selected -= 1;
-                    }
-                }
-                KeyCode::Down => {
-                    if !self.available_ports.is_empty()
-                        && self.port_selected < self.available_ports.len() - 1
-                    {
-                        self.port_selected += 1;
-                    }
-                }
-                _ => {}
-            },
-            // 波特率
-            1 => match key.code {
-                KeyCode::Left | KeyCode::Down => {
-                    if self.baud_rate_selected > 0 {
-                        self.baud_rate_selected -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Up => {
-                    if self.baud_rate_selected < self.baud_rates.len() - 1 {
-                        self.baud_rate_selected += 1;
-                    }
-                }
-                _ => {}
-            },
-            // 数据位
-            2 => match key.code {
-                KeyCode::Left | KeyCode::Down => {
-                    if self.data_bits_selected > 0 {
-                        self.data_bits_selected -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Up => {
-                    if self.data_bits_selected < self.data_bits_options.len() - 1 {
-                        self.data_bits_selected += 1;
-                    }
-                }
-                _ => {}
-            },
-            // 校验位
-            3 => match key.code {
-                KeyCode::Left | KeyCode::Down => {
-                    if self.parity_selected > 0 {
-                        self.parity_selected -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Up => {
-                    if self.parity_selected < self.parity_options.len() - 1 {
-                        self.parity_selected += 1;
-                    }
-                }
-                _ => {}
-            },
-            // 停止位
-            4 => match key.code {
-                KeyCode::Left | KeyCode::Down => {
-                    if self.stop_bits_selected > 0 {
-                        self.stop_bits_selected -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Up => {
-                    if self.stop_bits_selected < self.stop_bits_options.len() - 1 {
-                        self.stop_bits_selected += 1;
-                    }
-                }
-                _ => {}
-            },
-            // 流控
-            5 => match key.code {
-                KeyCode::Left | KeyCode::Down => {
-                    if self.flow_control_selected > 0 {
-                        self.flow_control_selected -= 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Up => {
-                    if self.flow_control_selected < self.flow_control_options.len() - 1 {
-                        self.flow_control_selected += 1;
-                    }
-                }
-                _ => {}
-            },
+        // 字母快捷键选择设置项
+        match key.code {
+            KeyCode::Char('p') => {
+                self.settings_sub_index = 0;
+                return;
+            }
+            KeyCode::Char('b') => {
+                self.settings_sub_index = 1;
+                return;
+            }
+            KeyCode::Char('d') => {
+                self.settings_sub_index = 2;
+                return;
+            }
+            KeyCode::Char('y') => {
+                self.settings_sub_index = 3;
+                return;
+            }
+            KeyCode::Char('s') => {
+                self.settings_sub_index = 4;
+                return;
+            }
+            KeyCode::Char('f') => {
+                self.settings_sub_index = 5;
+                return;
+            }
+            KeyCode::Char('c') => {
+                self.toggle_connection();
+                return;
+            }
             _ => {}
         }
 
-        // 如果修改了参数，同步到 serial_settings
-        self.sync_settings();
-
-        // C 键连接/断开（在任何子项下都有效）
-        if key.code == KeyCode::Char('c')
-            && (key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::CONTROL)
-        {
-            self.toggle_connection();
+        // ↑↓ 改变当前选中项的值
+        match self.settings_sub_index {
+            0 => {
+                // 端口
+                match key.code {
+                    KeyCode::Up => {
+                        if self.port_selected > 0 {
+                            self.port_selected -= 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if !self.available_ports.is_empty()
+                            && self.port_selected < self.available_ports.len() - 1
+                        {
+                            self.port_selected += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            1 => {
+                // 波特率
+                match key.code {
+                    KeyCode::Up => {
+                        if self.baud_rate_selected < self.baud_rates.len() - 1 {
+                            self.baud_rate_selected += 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.baud_rate_selected > 0 {
+                            self.baud_rate_selected -= 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            2 => {
+                // 数据位
+                match key.code {
+                    KeyCode::Up => {
+                        if self.data_bits_selected < self.data_bits_options.len() - 1 {
+                            self.data_bits_selected += 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.data_bits_selected > 0 {
+                            self.data_bits_selected -= 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            3 => {
+                // 校验位
+                match key.code {
+                    KeyCode::Up => {
+                        if self.parity_selected < self.parity_options.len() - 1 {
+                            self.parity_selected += 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.parity_selected > 0 {
+                            self.parity_selected -= 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            4 => {
+                // 停止位
+                match key.code {
+                    KeyCode::Up => {
+                        if self.stop_bits_selected < self.stop_bits_options.len() - 1 {
+                            self.stop_bits_selected += 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.stop_bits_selected > 0 {
+                            self.stop_bits_selected -= 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            5 => {
+                // 流控
+                match key.code {
+                    KeyCode::Up => {
+                        if self.flow_control_selected < self.flow_control_options.len() - 1 {
+                            self.flow_control_selected += 1;
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.flow_control_selected > 0 {
+                            self.flow_control_selected -= 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
         }
+
+        self.sync_settings();
     }
 
     /// 将选中的选项同步到 serial_settings
@@ -467,6 +551,15 @@ impl App {
 
     fn handle_send_input_key(&mut self, key: KeyEvent) {
         match key.code {
+            KeyCode::Char('l') if key.modifiers.is_empty() => {
+                // 循环切换行尾
+                self.line_ending = match self.line_ending {
+                    LineEnding::None => LineEnding::LF,
+                    LineEnding::LF => LineEnding::CR,
+                    LineEnding::CR => LineEnding::CRLF,
+                    LineEnding::CRLF => LineEnding::None,
+                };
+            }
             KeyCode::Char(c) => {
                 self.send_input.push(c);
             }
@@ -478,14 +571,6 @@ impl App {
                 if !input.is_empty() {
                     self.send_data(input.into_bytes());
                 }
-            }
-            KeyCode::Left => {
-                self.line_ending = match self.line_ending {
-                    LineEnding::None => LineEnding::CRLF,
-                    LineEnding::CRLF => LineEnding::CR,
-                    LineEnding::CR => LineEnding::LF,
-                    LineEnding::LF => LineEnding::None,
-                };
             }
             _ => {}
         }
