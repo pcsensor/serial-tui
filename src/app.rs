@@ -257,16 +257,6 @@ impl App {
                 return;
             }
             KeyEvent {
-                code: KeyCode::Char('l'),
-                modifiers: KeyModifiers::CONTROL,
-                ..
-            } => {
-                self.terminal_lines.clear();
-                self.data_records.clear();
-                self.scroll_offset = 0;
-                return;
-            }
-            KeyEvent {
                 code: KeyCode::Char('p'),
                 modifiers: KeyModifiers::CONTROL,
                 ..
@@ -846,7 +836,7 @@ impl App {
 
     fn handle_send_input_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('l') if key.modifiers.is_empty() => {
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // 循环切换行尾
                 self.line_ending = match self.line_ending {
                     LineEnding::None => LineEnding::LF,
