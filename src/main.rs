@@ -38,7 +38,9 @@ async fn main() -> Result<()> {
         while key_running_clone.load(std::sync::atomic::Ordering::Relaxed) {
             if crossterm::event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
                 if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
-                    if key_tx.send(Event::Key(key)).is_err() {
+                    if key.kind == crossterm::event::KeyEventKind::Press
+                        && key_tx.send(Event::Key(key)).is_err()
+                    {
                         break;
                     }
                 }
